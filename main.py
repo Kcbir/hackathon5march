@@ -469,6 +469,12 @@ async def dashboard_ws(ws: WebSocket):
         dashboard_clients.discard(ws)
 
 # ═══════════════════════════════════════════════════════════════
+# TWILIO VOICE ROUTES
+# ═══════════════════════════════════════════════════════════════
+from twilio_voice import router as twilio_router
+app.include_router(twilio_router)
+
+# ═══════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
@@ -478,5 +484,6 @@ if __name__ == "__main__":
     print("  📊 Dashboard: http://localhost:8000")
     print("  📝 API Docs:  http://localhost:8000/docs")
     print("  💬 Chat API:  POST http://localhost:8000/api/chat")
+    print("  📞 Twilio:    POST http://localhost:8000/twilio/call")
     print("=" * 55)
     uvicorn.run(app, host="0.0.0.0", port=8000)
