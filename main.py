@@ -35,7 +35,7 @@ MENU = {
 
 ORDERS_FILE = "orders.json"
 
-app = FastAPI(title="Mudigonda Sharma Cafe — AI Voice Copilot")
+app = FastAPI(title="Mudigonda Cafe — AI Voice Copilot")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
@@ -81,9 +81,61 @@ def build_prompt(name=None, fav=None):
 YOUR NAME: Omkaar. You work at the cafe.
 
 MENU:
-- Aloo Paratha (P01 — Rs.50)
-- Paneer Butter Masala (C05 — Rs.150)
-- Lassi (B02 — Rs.60)
+-- Idlis
+- Steamed Idli (2 pcs)  ₹60
+Served with piping hot sambar and fresh coconut chutney; made from premium aged Sona Masuri rice
+
+- Mini Ghee Idli (14 pcs)  ₹80
+Soaked in pure A2 desi ghee with podi spice; a melt-in-the-mouth delicacy using traditional stone-ground batter
+
+- Thatte Idli  ₹70
+The famous plate-sized soft idli from Karnataka, served with our signature spicy tomato-garlic chutney
+
+-- Dosa
+- Classic Masala Dosa  ₹70
+Stuffed with a spiced potato mash and served with dual chutneys; fermented naturally for a perfectly crisp exterior
+
+- Ghee Roast Dosa (Owner's Favorite)  ₹90
+Roasted to golden perfection using pure, farm-fresh ghee sourced directly from local dairies
+
+- Mysore Masala Dosa  ₹90
+Smeared with a fiery, in-house red garlic paste and served with premium coconut chutney and sambar
+
+- Rava Dosa  ₹80
+A crispy, lacy semolina crepe studded with cumin; made from the highest-grade double-roasted rava
+
+-- Vadas
+Crispy Medu Vada (2 pcs)  ₹60
+Two golden, donut-shaped lentil fritters served with sambar; strictly fried in premium cold-pressed sunflower oil
+
+- Rasam Vada  ₹70
+Medu vada soaked in a tangy, peppery tamarind broth infused with fresh, hand-picked curry leaves
+
+-- Rice & Meals
+- Ven Pongal  ₹70
+A comforting mix of rice and yellow lentils tempered with black pepper and cashews; rich in pure ghee
+
+- Bisi Bele Bath  ₹80
+A spicy, wholesome rice and lentil dish loaded with vegetables and authentic, slow-roasted Karnataka spices
+
+- Curd Rice  ₹60
+Cooling yogurt mixed with soft rice, tempered with mustard seeds; garnished with fresh pomegranate seeds
+
+Lemon Rice  ₹60
+Tangy lemon-infused rice tempered with crunchy peanuts and turmeric; a zesty, staple comfort food
+
+-- Specials & Beverages
+- Onion Uttapam  ₹70
+A thick, savory pancake topped with caramelized onions and green chilies; batter fermented naturally for 12 hours
+
+- Appam with Veg Stew  ₹90
+Soft, lacy rice hoppers served alongside a mild, fragrant coconut milk and mixed vegetable stew
+
+- Authentic Filter Coffee  ₹50
+Brewed fresh using a traditional brass filter with a premium 80/20 Arabica-chicory blend sourced directly from Coorg
+
+- Sweet Kesari Bath  ₹60
+A rich semolina dessert flavored with saffron strands and roasted cashews; the perfect sweet finish
 
 TODAY'S OFFERS (keep these separate — only mention AFTER the customer has ordered something, and only if relevant):
 - Buy 2 Lassi, get Rs.20 off
