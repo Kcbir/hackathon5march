@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from groq import Groq
 import requests
 import uvicorn
+from supabase import create_client
 
 load_dotenv()
 
@@ -27,10 +28,28 @@ SARVAM_KEY = os.getenv("SARVAM_API_KEY", "")
 
 groq_client = Groq(api_key=GROQ_KEY)
 
+SUPABASE_URL = "https://rlgerrarssaevbxqpxuz.supabase.co"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsZ2VycmFyc3NhZXZieHFweHV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzE1NjMsImV4cCI6MjA4ODMwNzU2M30.JAX0JUrH5oS2Fl4E53orZNJbxMdJ9Pv7CITJorP4-xM")
+supa = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 MENU = {
-    "P01": {"name": "Aloo Paratha",        "price": 50},
-    "C05": {"name": "Paneer Butter Masala", "price": 150},
-    "B02": {"name": "Lassi",               "price": 60},
+    "I01": {"name": "Steamed Idli (2 pcs)",       "price": 60},
+    "I02": {"name": "Mini Ghee Idli (14 pcs)",    "price": 80},
+    "I03": {"name": "Thatte Idli",                "price": 70},
+    "D01": {"name": "Classic Masala Dosa",         "price": 70},
+    "D02": {"name": "Ghee Roast Dosa",             "price": 90},
+    "D03": {"name": "Mysore Masala Dosa",           "price": 90},
+    "D04": {"name": "Rava Dosa",                   "price": 80},
+    "V01": {"name": "Crispy Medu Vada (2 pcs)",    "price": 60},
+    "V02": {"name": "Rasam Vada",                  "price": 70},
+    "R01": {"name": "Ven Pongal",                  "price": 70},
+    "R02": {"name": "Bisi Bele Bath",               "price": 80},
+    "R03": {"name": "Curd Rice",                   "price": 60},
+    "R04": {"name": "Lemon Rice",                  "price": 60},
+    "S01": {"name": "Onion Uttapam",               "price": 70},
+    "S02": {"name": "Appam with Veg Stew",          "price": 90},
+    "B01": {"name": "Authentic Filter Coffee",      "price": 50},
+    "B02": {"name": "Sweet Kesari Bath",            "price": 60},
 }
 
 ORDERS_FILE = "orders.json"
@@ -57,10 +76,28 @@ def load_orders():
     return {"orders": []}
 
 def save_order(order):
+    # Local JSON backup
     db = load_orders()
     db["orders"].append(order)
     with open(ORDERS_FILE, "w") as f:
         json.dump(db, f, indent=2, ensure_ascii=False)
+
+    # Push to Supabase
+    try:
+        row = {
+            "order_id":         order.get("order_id"),
+            "customer_name":    order.get("customer_name"),
+            "items":            json.dumps(order.get("items", []), ensure_ascii=False),
+            "total":            order.get("total", 0),
+            "feedback":         order.get("feedback"),
+            "rating":           order.get("rating"),
+            "delivery_type":    order.get("delivery_type"),
+            "delivery_address": order.get("delivery_address"),
+            "created_at":       order.get("timestamp"),
+        }
+        supa.table("orders").insert(row).execute()
+    except Exception as e:
+        print(f"Supabase insert failed (order still saved locally): {e}")
 
 def calc_total(items):
     return sum(
@@ -138,13 +175,10 @@ Brewed fresh using a traditional brass filter with a premium 80/20 Arabica-chico
 A rich semolina dessert flavored with saffron strands and roasted cashews; the perfect sweet finish
 
 TODAY'S OFFERS (keep these separate — only mention AFTER the customer has ordered something, and only if relevant):
-- Buy 2 Lassi, get Rs.20 off
-- Free Lassi with any Paneer Butter Masala order
-- Add a second Aloo Paratha for just Rs.30
-- Today's Special: Paneer Butter Masala + 2 Paratha combo for Rs.220
+- Buy 2 Filter Coffees, get Rs.20 off
 """ + caller + """
 FLOW (follow this strictly):
-1. GREETING: Always start with something like "Hello! This is Mudigonda Sharma Cafe. How can I help you today?" Or something like that but good Keep it natural.
+1. GREETING: Always start with "Vanakam Swamy leda Swamini, this is Mudigonda Cafe, how may I help you today?" — keep that South Indian hospitality. If the caller is a returning customer, greet by name.
 2. TAKE ORDER: Listen, confirm items and quantities. If something is unclear, ask simply. Don't suggest items unprompted.
 3. OFFER (only once, only if relevant): After they say what they want, if an offer matches their order, mention it casually. Like "btw we have an offer on that — want me to add it?" If nothing matches, skip it. Don't force.
 4. DELIVERY OR TAKEOUT: Ask "Would you like this delivered or is this takeout?" If delivery, ask for their address.
@@ -175,7 +209,7 @@ Respond in STRICT JSON only — no markdown, no extra text:
   "delivery_address": "Address string, or null",
   "cart_status": "shopping | confirming | closed",
   "order_data": [
-    {"item_code": "P01", "qty": 1, "modifiers": "none"}
+    {"item_code": "D01", "qty": 1, "modifiers": "none"}
   ]
 }"""
 

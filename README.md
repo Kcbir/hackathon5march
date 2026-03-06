@@ -20,7 +20,7 @@ Built for a hackathon in under 24 hours.
                     │                                      │
                     │  Route A: tts_message → Audio out     │
                     │  Route B: AI brain → Dashboard WS     │
-                    │  Route C: order_data → orders.json    │
+                    │  Route C: order_data → Supabase + JSON │
                     └──────────────────────────────────────┘
 ```
 
@@ -42,7 +42,7 @@ Built for a hackathon in under 24 hours.
 | **Smart Offers** | Pitches relevant deals only once, only after ordering — not pushy |
 | **Delivery/Takeout** | Asks preference, collects address for delivery |
 | **1-5 Rating** | Collects experience rating after order confirmation |
-| **Order Persistence** | Every order saved to `orders.json` with ID, items, total, rating, feedback, timestamp |
+| **Order Persistence** | Every order saved to Supabase + local JSON with ID, items, total, rating, feedback, timestamp |
 | **Live Dashboard** | Judges see AI thinking, sentiment, cart updates in real-time via WebSocket |
 | **Structured JSON Output** | Every LLM response is a strict JSON — ready for direct PoS/KOT integration |
 
@@ -50,16 +50,16 @@ Built for a hackathon in under 24 hours.
 
 ```json
 {
-  "thought_process": "Customer wants 2 parathas. Low urgency, happy mood. I'll mention the combo deal.",
-  "tts_message": "Sure, 2 Aloo Paratha. Btw we have an offer — second one for just Rs.30. Want me to add it?",
+  "thought_process": "Customer wants 2 masala dosas. Low urgency, happy mood. I'll mention the coffee offer.",
+  "tts_message": "Sure, 2 Classic Masala Dosa. Btw we have an offer — buy 2 Filter Coffees, get Rs.20 off. Interested?",
   "conversation_stage": "offer",
   "ai_tone": "warm_and_friendly",
   "customer_analysis": { "sentiment": "happy", "urgency": "low" },
-  "offer_pitched": "Second Aloo Paratha for Rs.30",
+  "offer_pitched": "Buy 2 Filter Coffees, get Rs.20 off",
   "customer_rating": null,
   "delivery_type": null,
   "cart_status": "shopping",
-  "order_data": [{"item_code": "P01", "qty": 2, "modifiers": "none"}]
+  "order_data": [{"item_code": "D01", "qty": 2, "modifiers": "none"}]
 }
 ```
 
@@ -69,26 +69,40 @@ Built for a hackathon in under 24 hours.
 
 | Item | Code | Price |
 |---|---|---|
-| Aloo Paratha | P01 | ₹50 |
-| Paneer Butter Masala | C05 | ₹150 |
-| Lassi | B02 | ₹60 |
+| Steamed Idli (2 pcs) | I01 | ₹60 |
+| Mini Ghee Idli (14 pcs) | I02 | ₹80 |
+| Thatte Idli | I03 | ₹70 |
+| Classic Masala Dosa | D01 | ₹70 |
+| Ghee Roast Dosa (Owner's Fav) | D02 | ₹90 |
+| Mysore Masala Dosa | D03 | ₹90 |
+| Rava Dosa | D04 | ₹80 |
+| Crispy Medu Vada (2 pcs) | V01 | ₹60 |
+| Rasam Vada | V02 | ₹70 |
+| Ven Pongal | R01 | ₹70 |
+| Bisi Bele Bath | R02 | ₹80 |
+| Curd Rice | R03 | ₹60 |
+| Lemon Rice | R04 | ₹60 |
+| Onion Uttapam | S01 | ₹70 |
+| Appam with Veg Stew | S02 | ₹90 |
+| Authentic Filter Coffee | B01 | ₹50 |
+| Sweet Kesari Bath | B02 | ₹60 |
 
 ---
 
 ## Conversation Flow
 
 ```
-Omkaar: "Hello! Mudigonda Sharma Cafe, main Omkaar bol raha hoon. How can I help you?"
-Customer: "Ek paneer butter masala dedo"
-Omkaar: "Sure, 1 Paneer Butter Masala. Btw, you get a free Lassi with that — want it?"
-Customer: "Haan daldo"
+Omkaar: "Vanakam Swamy! This is Mudigonda Cafe, how may I help you today?"
+Customer: "Ek masala dosa dedo"
+Omkaar: "Sure, 1 Classic Masala Dosa. Btw, buy 2 Filter Coffees get Rs.20 off — interested?"
+Customer: "Nah just the dosa"
 Omkaar: "Delivery ya takeout?"
-Customer: "Delivery, 42 MG Road Hyderabad"
-Omkaar: "1 Paneer Butter Masala Rs.150, 1 Lassi free. Total Rs.150. Delivery to 42 MG Road. Confirm?"
+Customer: "Takeout"
+Omkaar: "1 Classic Masala Dosa Rs.70. Total Rs.70. Confirm karun?"
 Customer: "Haan"
 Omkaar: "Quick one — rate this experience 1 to 5?"
 Customer: "5"
-Omkaar: "Thanks! Order ORD-A1B2C3, delivered in about 16 minutes. Take care!"
+Omkaar: "Thanks! Order ORD-A1B2C3, ready in about 16 min. Vanakam!"
 ```
 
 ---
@@ -98,7 +112,7 @@ Omkaar: "Thanks! Order ORD-A1B2C3, delivered in about 16 minutes. Take care!"
 ### 1. Install dependencies
 
 ```bash
-pip install fastapi uvicorn groq requests python-dotenv sounddevice
+pip install fastapi uvicorn groq requests python-dotenv sounddevice supabase
 ```
 
 ### 2. Run the server
@@ -157,14 +171,17 @@ curl -X POST http://localhost:8000/api/chat \
 ## File Structure
 
 ```
-├── main.py               # FastAPI server — the entire backend brain
+├── main.py               # FastAPI server — the entire backend brain (single source of truth)
 ├── this.py               # Terminal test client (text mode)
 ├── pipeline.py           # Standalone voice demo (mic → STT → LLM → TTS)
+├── llm.py                # Standalone LLM module (imports from main.py)
+├── setup_supabase.py     # Supabase table setup + menu upload
+├── cost_optimization.py  # Menu price optimization (Supabase + gradient descent)
+├── menu.csv              # Full South Indian menu dataset
+├── final_menu_prices.csv # Optimized menu prices dataset
 ├── static/
 │   └── dashboard.html    # Live judge dashboard (dark theme, WebSocket)
-├── orders.json           # Order database (auto-generated)
-├── cost_optimization.py  # Menu price optimization (Supabase + gradient descent)
-├── final_menu_prices.csv # Optimized menu prices dataset
+├── orders.json           # Local order backup (auto-generated)
 └── README.md
 ```
 
@@ -177,7 +194,7 @@ curl -X POST http://localhost:8000/api/chat \
 - **TTS**: Sarvam.ai Bulbul v2
 - **Backend**: FastAPI + WebSockets
 - **Dashboard**: Vanilla HTML/CSS/JS (no framework needed)
-- **Database**: JSON file (orders.json)
+- **Database**: Supabase (PostgreSQL) + local JSON fallback
 - **Price Optimization**: Gradient descent on Supabase menu data
 
 ---
