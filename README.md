@@ -1,6 +1,6 @@
-# Mudigonda Sharma Cafe — AI Voice Ordering Copilot
+# Mysore  Cafe — AI Voice Ordering Copilot
 
-An AI-powered voice ordering system for restaurants. Customers call in, speak their order in **English, Hindi, or Hinglish**, and the AI waiter (Omkaar) handles everything — from taking the order, pitching relevant offers, asking delivery/takeout, collecting a rating, and generating a kitchen-ready order ticket (KOT).
+An AI-powered voice ordering system for restaurants. Customers call in, speak their order in **English, Hindi, or Hinglish**, and the AI waiter (Arjun) handles everything — from taking the order, pitching relevant offers, asking delivery/takeout, collecting a rating, and generating a kitchen-ready order ticket (KOT).
 
 Built for a hackathon in under 24 hours.
 
@@ -92,17 +92,17 @@ Built for a hackathon in under 24 hours.
 ## Conversation Flow
 
 ```
-Omkaar: "Vanakam Swamy! This is Mudigonda Cafe, how may I help you today?"
+Arjun: "Vanakam Swamy! This is Mysore Cafe, how may I help you today?"
 Customer: "Ek masala dosa dedo"
-Omkaar: "Sure, 1 Classic Masala Dosa. Btw, buy 2 Filter Coffees get Rs.20 off — interested?"
+Arjun: "Sure, 1 Classic Masala Dosa. Btw, buy 2 Filter Coffees get Rs.20 off — interested?"
 Customer: "Nah just the dosa"
-Omkaar: "Delivery ya takeout?"
+Arjun: "Delivery ya takeout?"
 Customer: "Takeout"
-Omkaar: "1 Classic Masala Dosa Rs.70. Total Rs.70. Confirm karun?"
+Arjun: "1 Classic Masala Dosa Rs.70. Total Rs.70. Confirm karun?"
 Customer: "Haan"
-Omkaar: "Quick one — rate this experience 1 to 5?"
+Arjun: "Quick one — rate this experience 1 to 5?"
 Customer: "5"
-Omkaar: "Thanks! Order ORD-A1B2C3, ready in about 16 min. Vanakam!"
+Arjun: "Thanks! Order ORD-A1B2C3, ready in about 16 min. Vanakam!"
 ```
 
 ---
@@ -133,7 +133,7 @@ Open `http://localhost:8000` in your browser — this is the live judge dashboar
 python this.py
 ```
 
-Omkaar greets automatically. Just type your orders.
+Arjun greets automatically. Just type your orders.
 
 ### 5. Test via API
 
@@ -162,7 +162,7 @@ curl -X POST http://localhost:8000/api/chat \
 {
   "session_id": "optional-session-id",
   "message": "ek lassi dedo",
-  "customer_name": "Omkaar"
+  "customer_name": "Arjun"
 }
 ```
 

@@ -1,5 +1,5 @@
 """
-llm.py — Standalone LLM module for Mudigonda Sharma Cafe
+llm.py — Standalone LLM module for Mysore  Cafe
 Imports the prompt and LLM logic from main.py (the single source of truth).
 Use main.py as the server. This file is for quick standalone testing only.
 """

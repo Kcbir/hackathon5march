@@ -1,5 +1,5 @@
 """
-Mudigonda Sharma Cafe — AI Voice Ordering Copilot
+Mysore  Cafe — AI Voice Ordering Copilot
 FastAPI server: STT → LLM → TTS + Live Judge Dashboard
 """
 
@@ -33,14 +33,14 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e
 supa = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 MENU = {
-    "I01": {"name": "Steamed Idli (2 pcs)",       "price": 60},
-    "I02": {"name": "Mini Ghee Idli (14 pcs)",    "price": 80},
+    "I01": {"name": "Steamed Idli (2 pieces)",       "price": 60},
+    "I02": {"name": "Mini Ghee Idli (14 pieces)",    "price": 80},
     "I03": {"name": "Thatte Idli",                "price": 70},
     "D01": {"name": "Classic Masala Dosa",         "price": 70},
     "D02": {"name": "Ghee Roast Dosa",             "price": 90},
     "D03": {"name": "Mysore Masala Dosa",           "price": 90},
     "D04": {"name": "Rava Dosa",                   "price": 80},
-    "V01": {"name": "Crispy Medu Vada (2 pcs)",    "price": 60},
+    "V01": {"name": "Crispy Medu Vada (2 pieces)",    "price": 60},
     "V02": {"name": "Rasam Vada",                  "price": 70},
     "R01": {"name": "Ven Pongal",                  "price": 70},
     "R02": {"name": "Bisi Bele Bath",               "price": 80},
@@ -54,7 +54,7 @@ MENU = {
 
 ORDERS_FILE = "orders.json"
 
-app = FastAPI(title="Mudigonda Cafe — AI Voice Copilot")
+app = FastAPI(title="Mysore Cafe — AI Voice Copilot")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
@@ -82,22 +82,70 @@ def save_order(order):
     with open(ORDERS_FILE, "w") as f:
         json.dump(db, f, indent=2, ensure_ascii=False)
 
-    # Push to Supabase
+    items = order.get("items", [])
+    total_items = sum(i.get("qty", 0) for i in items)
+
+    # Push to Supabase — orders table
     try:
-        row = {
+        supa.table("orders").insert({
             "order_id":         order.get("order_id"),
-            "customer_name":    order.get("customer_name"),
-            "items":            json.dumps(order.get("items", []), ensure_ascii=False),
+            "total_items":      total_items,
             "total":            order.get("total", 0),
-            "feedback":         order.get("feedback"),
-            "rating":           order.get("rating"),
             "delivery_type":    order.get("delivery_type"),
-            "delivery_address": order.get("delivery_address"),
-            "created_at":       order.get("timestamp"),
-        }
-        supa.table("orders").insert(row).execute()
+            "special_requests": order.get("special_requests"),
+            "rating":           order.get("rating"),
+        }).execute()
     except Exception as e:
-        print(f"Supabase insert failed (order still saved locally): {e}")
+        print(f"Supabase orders insert failed: {e}")
+        return
+
+    # Push order_items rows
+    try:
+        rows = [
+            {
+                "order_id":   order.get("order_id"),
+                "item_code":  i.get("item_code", ""),
+                "item_name":  i.get("name", ""),
+                "qty":        i.get("qty", 0),
+                "unit_price": i.get("price", 0),
+                "line_total": i.get("price", 0) * i.get("qty", 0),
+            }
+            for i in items
+        ]
+        if rows:
+            supa.table("order_items").insert(rows).execute()
+    except Exception as e:
+        print(f"Supabase order_items insert failed: {e}")
+
+
+def save_call_logs(order_id: str, history: list):
+    """Save every conversation turn to call_logs table."""
+    import re as _re
+    rows = []
+    for turn_idx, msg in enumerate(history):
+        role = msg.get("role", "")
+        if role not in ("user", "assistant"):
+            continue
+        content = msg.get("content", "")
+        # For assistant turns, extract just tts_message if JSON
+        if role == "assistant":
+            m = _re.search(r'"tts_message"\s*:\s*"((?:[^"]|\\")*)"', content)
+            display = m.group(1) if m else content
+            label = "arjun"
+        else:
+            display = content
+            label = "user"
+        rows.append({
+            "order_id": order_id,
+            "turn":     turn_idx + 1,
+            "role":     label,
+            "message":  display,
+        })
+    try:
+        if rows:
+            supa.table("call_logs").insert(rows).execute()
+    except Exception as e:
+        print(f"Supabase call_logs insert failed: {e}")
 
 def calc_total(items):
     return sum(
@@ -109,109 +157,52 @@ def calc_total(items):
 # SYSTEM PROMPT
 # ═══════════════════════════════════════════════════════════════
 def build_prompt(name=None, fav=None):
-    caller = ""
-    if name:
-        caller = f"\nThis is a returning customer: {name}. They've ordered before. Don't make a big deal of it — just be naturally warm.\n"
+    caller = f"Returning customer: {name}. Greet by name, keep it natural." if name else ""
 
-    return """You are Omkaar, a chill and friendly waiter at Mudigonda Sharma Cafe. You answer phone/voice orders. Talk naturally like a real person — short sentences, no corporate speak, no over-enthusiasm.
-
-YOUR NAME: Omkaar. You work at the cafe.
-
-MENU:
--- Idlis
-- Steamed Idli (2 pcs)  ₹60
-Served with piping hot sambar and fresh coconut chutney; made from premium aged Sona Masuri rice
-
-- Mini Ghee Idli (14 pcs)  ₹80
-Soaked in pure A2 desi ghee with podi spice; a melt-in-the-mouth delicacy using traditional stone-ground batter
-
-- Thatte Idli  ₹70
-The famous plate-sized soft idli from Karnataka, served with our signature spicy tomato-garlic chutney
-
--- Dosa
-- Classic Masala Dosa  ₹70
-Stuffed with a spiced potato mash and served with dual chutneys; fermented naturally for a perfectly crisp exterior
-
-- Ghee Roast Dosa (Owner's Favorite)  ₹90
-Roasted to golden perfection using pure, farm-fresh ghee sourced directly from local dairies
-
-- Mysore Masala Dosa  ₹90
-Smeared with a fiery, in-house red garlic paste and served with premium coconut chutney and sambar
-
-- Rava Dosa  ₹80
-A crispy, lacy semolina crepe studded with cumin; made from the highest-grade double-roasted rava
-
--- Vadas
-Crispy Medu Vada (2 pcs)  ₹60
-Two golden, donut-shaped lentil fritters served with sambar; strictly fried in premium cold-pressed sunflower oil
-
-- Rasam Vada  ₹70
-Medu vada soaked in a tangy, peppery tamarind broth infused with fresh, hand-picked curry leaves
-
--- Rice & Meals
-- Ven Pongal  ₹70
-A comforting mix of rice and yellow lentils tempered with black pepper and cashews; rich in pure ghee
-
-- Bisi Bele Bath  ₹80
-A spicy, wholesome rice and lentil dish loaded with vegetables and authentic, slow-roasted Karnataka spices
-
-- Curd Rice  ₹60
-Cooling yogurt mixed with soft rice, tempered with mustard seeds; garnished with fresh pomegranate seeds
-
-Lemon Rice  ₹60
-Tangy lemon-infused rice tempered with crunchy peanuts and turmeric; a zesty, staple comfort food
-
--- Specials & Beverages
-- Onion Uttapam  ₹70
-A thick, savory pancake topped with caramelized onions and green chilies; batter fermented naturally for 12 hours
-
-- Appam with Veg Stew  ₹90
-Soft, lacy rice hoppers served alongside a mild, fragrant coconut milk and mixed vegetable stew
-
-- Authentic Filter Coffee  ₹50
-Brewed fresh using a traditional brass filter with a premium 80/20 Arabica-chicory blend sourced directly from Coorg
-
-- Sweet Kesari Bath  ₹60
-A rich semolina dessert flavored with saffron strands and roasted cashews; the perfect sweet finish
-
-TODAY'S OFFERS (keep these separate — only mention AFTER the customer has ordered something, and only if relevant):
-- Buy 2 Filter Coffees, get Rs.20 off
-""" + caller + """
-FLOW (follow this strictly):
-1. GREETING: Always start with "Vanakam Swamy leda Swamini, this is Mudigonda Cafe, how may I help you today?" — keep that South Indian hospitality. If the caller is a returning customer, greet by name.
-2. TAKE ORDER: Listen, confirm items and quantities. If something is unclear, ask simply. Don't suggest items unprompted.
-3. OFFER (only once, only if relevant): After they say what they want, if an offer matches their order, mention it casually. Like "btw we have an offer on that — want me to add it?" If nothing matches, skip it. Don't force.
-4. DELIVERY OR TAKEOUT: Ask "Would you like this delivered or is this takeout?" If delivery, ask for their address.
-5. CONFIRM: Read back the full order with prices and total. Ask "Shall I confirm this?"
-6. RATING: After confirmation, ask "Quick one — how would you rate this ordering experience, 1 to 5?" and wait for their number.
-7. CLOSE: Give them the order number and say their order will be ready/delivered in about 16 minutes. Say bye warmly.
-
-RULES:
-- Be brief. No long sentences. Talk like a real waiter on the phone.
-- Don't say things like "I see you love X" or "Great choice!" — that's cringe.
-- If customer sounds rushed, skip offers, skip small talk, just take the order fast.
-- Only pitch offers ONCE and only if they match what the customer ordered.
-
-Respond in STRICT JSON only — no markdown, no extra text:
-{
-  "thought_process": "Brief internal reasoning.",
-  "tts_message": "What you say to the customer.",
-  "conversation_stage": "greeting | ordering | offer | delivery | confirming | rating | closed",
-  "ai_tone": "warm_and_friendly | urgent_and_concise | casual",
-  "customer_analysis": {
-    "sentiment": "happy | neutral | annoyed | anxious",
-    "urgency": "low | medium | high"
-  },
-  "offer_pitched": "Description of offer mentioned, or null",
-  "customer_feedback": "Customer's feedback text, or null",
-  "customer_rating": null,
-  "delivery_type": "delivery | takeout | null",
-  "delivery_address": "Address string, or null",
-  "cart_status": "shopping | confirming | closed",
-  "order_data": [
-    {"item_code": "D01", "qty": 1, "modifiers": "none"}
-  ]
-}"""
+    return (
+        "You are Arjun, a friendly phone waiter at Mysore Cafe. Short sentences, natural speech — no corporate words.\n\n"
+        "MENU (use EXACT codes in order_data):\n"
+        "I01 Steamed Idli (2 pieces) Rs.60 | I02 Mini Ghee Idli (14 pieces) Rs.80 | I03 Thatte Idli Rs.70\n"
+        "D01 Classic Masala Dosa Rs.70 | D02 Ghee Roast Dosa Rs.90 | D03 Mysore Masala Dosa Rs.90 | D04 Rava Dosa Rs.80\n"
+        "V01 Medu Vada (2 pieces) Rs.60 | V02 Rasam Vada Rs.70\n"
+        "R01 Ven Pongal Rs.70 | R02 Bisi Bele Bath Rs.80 | R03 Curd Rice Rs.60 | R04 Lemon Rice Rs.60\n"
+        "S01 Onion Uttapam Rs.70 | S02 Appam with Veg Stew Rs.90\n"
+        "B01 Filter Coffee Rs.50 | B02 Sweet Kesari Bath Rs.60\n\n"
+        "COMBOS (suggest naturally when relevant, just once):\n"
+        "- Dosa + Filter Coffee = perfect pair (mention if they order a dosa without a drink)\n"
+        "- Idli / Vada + Filter Coffee = classic South Indian breakfast combo\n"
+        "- Any meal + Sweet Kesari Bath = great finish (mention if no dessert in order)\n\n"
+        "OFFER: 2 Filter Coffees -> save Rs.20 (mention once, only if relevant)\n"
+        + (caller + "\n" if caller else "")
+        + "CONVERSATION:\n"
+        "- Take order, confirm quantities. Ask if unclear.\n"
+        "- Listen for special requests (less spice, extra chutney, etc.) — capture in special_requests field.\n"
+        "- After they state their order: if a combo fits, suggest it once naturally. E.g. 'Want a Filter Coffee with that? Goes really well.' Skip if they already have a drink.\n"
+        "- If no dessert in order, casually mention Sweet Kesari Bath once. Skip if they decline.\n"
+        "- Ask delivery or takeout. Get address if delivery.\n"
+        "- Read back full order with each item price and total. Ask to confirm.\n"
+        "- Ask for 1-5 rating casually after confirm.\n"
+        "- Once rating received: thank them, give order number, say ready in ~16 min, warm bye.\n\n"
+        "RULES:\n"
+        "- ONLY use items from this exact menu. Never invent items.\n"
+        "- If the customer's words sound like a menu item (noisy speech, mispronunciation), assume they mean that item. Don't correct them, just confirm naturally.\n"
+        "- NEVER say item codes (I01, D01, etc.) out loud. Use item names only.\n"
+        "- Upsell only ONCE per suggestion. If they say no, drop it immediately.\n"
+        "- cart_status = closed only AFTER you say the goodbye with order number and time.\n"
+        "- Keep responses very short. You are on the phone.\n"
+        "- No 'great choice', no 'absolutely', no filler words.\n\n"
+        "Respond STRICT JSON only, no markdown:\n"
+        "{\n"
+        '"tts_message": "What Arjun says.",\n'
+        '"offer_pitched": "offer/combo pitched or null",\n'
+        '"special_requests": "e.g. less spice, extra chutney — or null",\n'
+        '"customer_rating": null,\n'
+        '"delivery_type": "delivery | takeout | null",\n'
+        '"delivery_address": "address or null",\n'
+        '"cart_status": "shopping | confirming | closed",\n'
+        '"order_data": [{"item_code": "I01", "qty": 1, "modifiers": "none"}]\n'
+        "}"
+    )
 
 # ═══════════════════════════════════════════════════════════════
 # LLM
@@ -238,15 +229,19 @@ def parse_response(raw):
     try:
         return json.loads(text)
     except json.JSONDecodeError:
+        # Try to salvage tts_message from partial/truncated JSON
+        m = re.search(r'"tts_message"\s*:\s*"((?:[^"]|\\")*)', text)
+        tts = m.group(1) if m else ""
+        # Try to get cart_status and order_data too
+        cs = re.search(r'"cart_status"\s*:\s*"(\w+)"', text)
         return {
-            "thought_process": "",
-            "tts_message": raw,
-            "conversation_stage": "ordering",
-            "ai_tone": "warm_and_friendly",
-            "customer_analysis": {"sentiment": "neutral", "urgency": "low"},
+            "tts_message": tts,
             "offer_pitched": None,
             "customer_feedback": None,
-            "cart_status": "shopping",
+            "customer_rating": None,
+            "delivery_type": None,
+            "delivery_address": None,
+            "cart_status": cs.group(1) if cs else "shopping",
             "order_data": [],
         }
 
@@ -276,7 +271,7 @@ def synthesize(text):
     payload = {
         "text": text,
         "target_language_code": "en-IN",
-        "speaker": "anushka",
+        "speaker": "aditya",
         "model": "bulbul:v2",
         "pace": 1.0,
         "speech_sample_rate": 22050,
@@ -478,7 +473,7 @@ async def dashboard_ws(ws: WebSocket):
 # ═══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     print("=" * 55)
-    print("  🍽️  Mudigonda Sharma Cafe — AI Voice Ordering Copilot")
+    print("  🍽️  Mysore  Cafe — AI Voice Ordering Copilot")
     print("  📡 Server:    http://localhost:8000")
     print("  📊 Dashboard: http://localhost:8000")
     print("  📝 API Docs:  http://localhost:8000/docs")

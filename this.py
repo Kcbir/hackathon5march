@@ -1,5 +1,5 @@
 """
-this.py — Test client for Mudigonda Sharma Cafe API
+this.py — Test client for Mysore  Cafe API
 Talks to the FastAPI server via HTTP. Start main.py first.
 """
 
@@ -15,7 +15,7 @@ def call(session_id, msg):
         json={
             "session_id": session_id,
             "message": msg,
-            "customer_name": "Omkaar",
+            "customer_name": "Arjun",
         },
     )
     return resp.json()
@@ -25,7 +25,7 @@ def show(data):
     print()
     print("-" * 50)
     print(f"  THOUGHT : {data.get('thought_process', '-')}")
-    print(f"  OMKAAR  : {data.get('tts_message', '-')}")
+    print(f"  Arjun  : {data.get('tts_message', '-')}")
     stage = data.get("conversation_stage", "-")
     print(f"  STAGE   : {stage}  |  TONE: {data.get('ai_tone', '-')}")
 
@@ -64,11 +64,11 @@ def show(data):
 
 def main():
     print("=" * 50)
-    print("  Mudigonda Sharma Cafe")
+    print("  Mysore  Cafe")
     print("  Make sure main.py is running!")
     print("=" * 50)
 
-    # Auto-initiate — Omkaar greets first
+    # Auto-initiate — Arjun greets first
     print("\n  Calling cafe...\n")
     data = call(None, "Hello")
     session_id = data.get("session_id")
