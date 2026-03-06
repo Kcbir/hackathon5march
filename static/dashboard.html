@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mudigonda Sharma Cafe — AI Brain Dashboard</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: #0a0a12;
+    color: #e0e0e0;
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    padding: 18px 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #ffffff10;
+  }
+  header h1 { font-size: 1.3rem; font-weight: 600; }
+  header h1 span { color: #f0c040; }
+  .status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #444; display: inline-block; margin-right: 8px;
+  }
+  .status-dot.live { background: #4ade80; box-shadow: 0 0 8px #4ade8088; }
+  .top-bar {
+    display: flex; gap: 12px; align-items: center; font-size: 0.85rem; color: #aaa;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: #ffffff08;
+    border: 1px solid #ffffff10;
+    border-radius: 14px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+  }
+  .card h2 {
+    font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px;
+    color: #888; margin-bottom: 14px;
+  }
+
+  /* Chat */
+  #chatBox {
+    height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+    padding-right: 6px;
+  }
+  #chatBox::-webkit-scrollbar { width: 4px; }
+  #chatBox::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+  .msg {
+    max-width: 88%; padding: 10px 14px; border-radius: 12px; font-size: 0.9rem;
+    line-height: 1.45; word-wrap: break-word;
+  }
+  .msg.user {
+    align-self: flex-end; background: #2563eb22; border: 1px solid #2563eb44; color: #93c5fd;
+  }
+  .msg.bot {
+    align-self: flex-start; background: #ffffff0a; border: 1px solid #ffffff15; color: #d1d5db;
+  }
+
+  .chat-input {
+    display: flex; gap: 8px; margin-top: 12px;
+  }
+  .chat-input input {
+    flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid #ffffff15;
+    background: #ffffff08; color: #e0e0e0; font-size: 0.9rem; outline: none;
+  }
+  .chat-input input:focus { border-color: #2563eb55; }
+  .chat-input button {
+    padding: 10px 20px; border-radius: 10px; border: none;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: white; font-weight: 600; cursor: pointer; font-size: 0.9rem;
+  }
+  .chat-input button:hover { opacity: 0.9; }
+
+  /* Brain */
+  .brain-field { margin-bottom: 12px; }
+  .brain-label {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.8px;
+    color: #666; margin-bottom: 4px;
+  }
+  .brain-value {
+    font-size: 0.9rem; color: #c4b5fd; padding: 8px 12px;
+    background: #ffffff06; border-radius: 8px; border: 1px solid #ffffff08;
+  }
+  .thought-box {
+    color: #fbbf24; font-style: italic; background: #fbbf2408;
+    border-color: #fbbf2415;
+  }
+
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 600;
+  }
+  .badge-green  { background: #4ade8020; color: #4ade80; }
+  .badge-yellow { background: #fbbf2420; color: #fbbf24; }
+  .badge-red    { background: #ef444420; color: #ef4444; }
+  .badge-blue   { background: #60a5fa20; color: #60a5fa; }
+  .badge-purple { background: #a78bfa20; color: #a78bfa; }
+
+  .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Cart */
+  .cart-item {
+    display: flex; justify-content: space-between; padding: 8px 0;
+    border-bottom: 1px solid #ffffff08; font-size: 0.9rem;
+  }
+  .cart-item:last-child { border-bottom: none; }
+  .cart-total {
+    margin-top: 12px; padding-top: 12px; border-top: 2px solid #ffffff15;
+    font-size: 1.1rem; font-weight: 700; color: #4ade80;
+    display: flex; justify-content: space-between;
+  }
+  .order-id {
+    font-size: 0.85rem; color: #7c3aed; font-weight: 600;
+    margin-bottom: 12px; padding: 6px 10px;
+    background: #7c3aed12; border-radius: 8px; display: inline-block;
+  }
+  .cart-status {
+    margin: 10px 0; padding: 10px;
+    border-radius: 8px; text-align: center; font-weight: 600;
+  }
+  .cart-status.shopping   { background: #3b82f620; color: #60a5fa; }
+  .cart-status.confirming { background: #f59e0b20; color: #fbbf24; }
+  .cart-status.closed     { background: #22c55e20; color: #4ade80; }
+
+  /* Feedback */
+  #feedbackBox {
+    margin-top: 14px; padding: 12px; background: #22c55e08;
+    border: 1px solid #22c55e22; border-radius: 10px; display: none;
+  }
+  #feedbackBox .brain-label { color: #4ade80; }
+
+  /* Setup */
+  .setup-row {
+    display: flex; gap: 8px; margin-bottom: 8px;
+  }
+  .setup-row input {
+    flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid #ffffff15;
+    background: #ffffff08; color: #e0e0e0; font-size: 0.85rem; outline: none;
+  }
+  .setup-row button {
+    padding: 8px 16px; border-radius: 8px; border: none;
+    background: #22c55e; color: #0a0a12; font-weight: 600; cursor: pointer;
+  }
+
+  .pulse { animation: pulse 2s infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍽️ <span>Mudigonda Sharma Cafe</span> — AI Brain Dashboard</h1>
+  <div class="top-bar">
+    <span><span class="status-dot" id="wsDot"></span> <span id="wsStatus">Disconnected</span></span>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- ═══ CHAT PANEL ═══ -->
+  <div class="card">
+    <h2>💬 Live Conversation</h2>
+    <div class="setup-row">
+      <input type="text" id="nameInput" placeholder="Customer name (optional)">
+      <input type="text" id="favInput" placeholder="Past favorite (optional)">
+      <button onclick="startSession()">Start</button>
+    </div>
+    <div id="chatBox"></div>
+    <div class="chat-input">
+      <input type="text" id="msgInput" placeholder="Type an order..." onkeydown="if(event.key==='Enter')sendMsg()">
+      <button onclick="sendMsg()">Send</button>
+    </div>
+  </div>
+
+  <!-- ═══ AI BRAIN PANEL ═══ -->
+  <div class="card">
+    <h2>🧠 AI Brain (X-Ray)</h2>
+
+    <div class="brain-field">
+      <div class="brain-label">💭 Thought Process</div>
+      <div class="brain-value thought-box" id="brainThought">Waiting for conversation...</div>
+    </div>
+
+    <div class="brain-field">
+      <div class="brain-label">📍 Stage / 🎭 Tone</div>
+      <div class="tags">
+        <span class="badge badge-purple" id="brainStage">—</span>
+        <span class="badge badge-blue" id="brainTone">—</span>
+      </div>
+    </div>
+
+    <div class="brain-field">
+      <div class="brain-label">😊 Sentiment / ⏱️ Urgency</div>
+      <div class="tags">
+        <span class="badge badge-green" id="brainSentiment">—</span>
+        <span class="badge badge-yellow" id="brainUrgency">—</span>
+      </div>
+    </div>
+
+    <div class="brain-field">
+      <div class="brain-label">🎁 Offer</div>
+      <div class="brain-value" id="brainOffer">None yet</div>
+    </div>
+
+    <div id="feedbackBox">
+      <div class="brain-label">📝 Customer Feedback</div>
+      <div class="brain-value" id="brainFeedback"></div>
+    </div>
+  </div>
+
+  <!-- ═══ CART / ORDER PANEL ═══ -->
+  <div class="card">
+    <h2>🛒 Order & Cart</h2>
+    <div class="order-id" id="orderId">No active order</div>
+    <div class="cart-status shopping" id="cartStatus">SHOPPING</div>
+    <div id="cartItems"><p style="color:#555;font-size:0.85rem;">Cart is empty</p></div>
+    <div class="cart-total" id="cartTotal" style="display:none;">
+      <span>Total</span><span id="totalAmt">₹0</span>
+    </div>
+
+    <div style="margin-top: 20px;">
+      <h2 style="margin-top: 8px;">📋 Recent Orders</h2>
+      <div id="recentOrders" style="font-size:0.85rem;color:#666;margin-top:8px;">Loading...</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BASE = window.location.origin;
+let sessionId = null;
+let customerName = null;
+let pastFav = null;
+let ws = null;
+
+// ── WebSocket for dashboard feed ──────────────────────────
+function connectDashboard() {
+  const wsUrl = BASE.replace('http','ws') + '/ws/dashboard';
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => {
+    document.getElementById('wsDot').classList.add('live');
+    document.getElementById('wsStatus').textContent = 'Live';
+  };
+  ws.onclose = () => {
+    document.getElementById('wsDot').classList.remove('live');
+    document.getElementById('wsStatus').textContent = 'Disconnected';
+    setTimeout(connectDashboard, 2000);
+  };
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    updateDashboard(data);
+  };
+}
+connectDashboard();
+
+// ── Session ───────────────────────────────────────────────
+function startSession() {
+  customerName = document.getElementById('nameInput').value.trim() || null;
+  pastFav = document.getElementById('favInput').value.trim() || null;
+  sessionId = null;
+  document.getElementById('chatBox').innerHTML = '';
+  document.getElementById('cartItems').innerHTML = '<p style="color:#555;font-size:0.85rem;">Cart is empty</p>';
+  document.getElementById('cartTotal').style.display = 'none';
+  document.getElementById('orderId').textContent = 'Starting...';
+  document.getElementById('cartStatus').textContent = 'SHOPPING';
+  document.getElementById('cartStatus').className = 'cart-status shopping';
+  addMsg('system', customerName ? `Session started for ${customerName}` : 'New session started');
+}
+
+// ── Send message via HTTP ─────────────────────────────────
+async function sendMsg() {
+  const input = document.getElementById('msgInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  addMsg('user', msg);
+
+  try {
+    const res = await fetch(BASE + '/api/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: msg,
+        customer_name: customerName,
+        past_favorite: pastFav,
+      })
+    });
+    const data = await res.json();
+    sessionId = data.session_id;
+    addMsg('bot', data.tts_message || data.toString());
+    updateDashboard(data);
+  } catch (err) {
+    addMsg('bot', '⚠️ Error: ' + err.message);
+  }
+}
+
+// ── Chat messages ─────────────────────────────────────────
+function addMsg(role, text) {
+  const box = document.getElementById('chatBox');
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── Update all dashboard panels ───────────────────────────
+function updateDashboard(d) {
+  // Brain
+  document.getElementById('brainThought').textContent = d.thought_process || '—';
+  document.getElementById('brainStage').textContent = d.conversation_stage || '—';
+  document.getElementById('brainTone').textContent = (d.ai_tone || '—').replace(/_/g, ' ');
+
+  const ca = d.customer_analysis || {};
+  const sentEl = document.getElementById('brainSentiment');
+  sentEl.textContent = ca.sentiment || '—';
+  sentEl.className = 'badge ' + sentimentColor(ca.sentiment);
+
+  const urgEl = document.getElementById('brainUrgency');
+  urgEl.textContent = ca.urgency || '—';
+  urgEl.className = 'badge ' + urgencyColor(ca.urgency);
+
+  document.getElementById('brainOffer').textContent = d.offer_pitched || 'None';
+
+  // Feedback
+  if (d.customer_feedback) {
+    document.getElementById('feedbackBox').style.display = 'block';
+    document.getElementById('brainFeedback').textContent = d.customer_feedback;
+  }
+
+  // Order
+  if (d.order_id) document.getElementById('orderId').textContent = d.order_id;
+
+  const status = d.cart_status || 'shopping';
+  const statusEl = document.getElementById('cartStatus');
+  statusEl.textContent = status.toUpperCase();
+  statusEl.className = 'cart-status ' + status;
+
+  const items = d.order_data || [];
+  const cartDiv = document.getElementById('cartItems');
+  if (items.length === 0) {
+    cartDiv.innerHTML = '<p style="color:#555;font-size:0.85rem;">Cart is empty</p>';
+    document.getElementById('cartTotal').style.display = 'none';
+  } else {
+    cartDiv.innerHTML = items.map(i =>
+      `<div class="cart-item">
+        <span>${i.name || i.item_code} × ${i.qty} ${i.modifiers && i.modifiers !== 'none' ? '(' + i.modifiers + ')' : ''}</span>
+        <span>₹${(i.price || 0) * i.qty}</span>
+      </div>`
+    ).join('');
+    document.getElementById('cartTotal').style.display = 'flex';
+    document.getElementById('totalAmt').textContent = '₹' + (d.order_total || 0);
+  }
+
+  if (status === 'closed') {
+    loadOrders();
+  }
+}
+
+function sentimentColor(s) {
+  if (s === 'happy') return 'badge-green';
+  if (s === 'annoyed' || s === 'anxious') return 'badge-red';
+  return 'badge-yellow';
+}
+function urgencyColor(u) {
+  if (u === 'high') return 'badge-red';
+  if (u === 'medium') return 'badge-yellow';
+  return 'badge-green';
+}
+
+// ── Load recent orders ────────────────────────────────────
+async function loadOrders() {
+  try {
+    const res = await fetch(BASE + '/api/orders');
+    const db = await res.json();
+    const orders = db.orders || [];
+    const div = document.getElementById('recentOrders');
+    if (orders.length === 0) {
+      div.innerHTML = '<p style="color:#555;">No orders yet</p>';
+    } else {
+      div.innerHTML = orders.slice(-5).reverse().map(o =>
+        `<div style="padding:6px 0;border-bottom:1px solid #ffffff08;">
+          <strong style="color:#7c3aed;">${o.order_id}</strong>
+          ${o.customer_name ? ' — ' + o.customer_name : ''}
+          <span style="float:right;color:#4ade80;">₹${o.total}</span>
+        </div>`
+      ).join('');
+    }
+  } catch(e) {
+    document.getElementById('recentOrders').textContent = 'Could not load orders';
+  }
+}
+loadOrders();
+setInterval(loadOrders, 10000);
+</script>
+
+</body>
+</html>
