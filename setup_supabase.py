@@ -59,14 +59,14 @@ CREATE POLICY "anon_all" ON cafe_menu FOR ALL USING (true) WITH CHECK (true);
 """
 import csv
 import json
+import os
+from dotenv import load_dotenv
 from supabase import create_client
 
-SUPABASE_URL = "https://rlgerrarssaevbxqpxuz.supabase.co"
-SUPABASE_KEY = (
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsZ2VycmFyc3NhZXZieHFweHV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzE1NjMsImV4cCI6MjA4ODMwNzU2M30."
-    "JAX0JUrH5oS2Fl4E53orZNJbxMdJ9Pv7CITJorP4-xM"
-)
+load_dotenv()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 supa = create_client(SUPABASE_URL, SUPABASE_KEY)
 

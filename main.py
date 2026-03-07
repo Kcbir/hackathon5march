@@ -28,8 +28,8 @@ SARVAM_KEY = os.getenv("SARVAM_API_KEY", "")
 
 groq_client = Groq(api_key=GROQ_KEY)
 
-SUPABASE_URL = "https://rlgerrarssaevbxqpxuz.supabase.co"
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsZ2VycmFyc3NhZXZieHFweHV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzE1NjMsImV4cCI6MjA4ODMwNzU2M30.JAX0JUrH5oS2Fl4E53orZNJbxMdJ9Pv7CITJorP4-xM")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 supa = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 MENU = {

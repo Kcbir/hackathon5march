@@ -9,14 +9,18 @@ to capture the caller's responses.
   3. POST /twilio/call    — triggers an outbound call to a given number
 """
 
+import re
 import uuid
 import asyncio
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Request, Response
 from twilio.twiml.voice_response import VoiceResponse, Gather
 from twilio.rest import Client
+from dotenv import load_dotenv
 
+load_dotenv()
 
 def _main():
     """Lazy import of main to avoid circular imports at module load time."""
@@ -24,44 +28,58 @@ def _main():
     return _m
 
 # ── Credentials ──────────────────────────────────────────────────────────────
-TWILIO_ACCOUNT_SID = "AC07d9cd91083115b2f50e1237893a2e6e"
-TWILIO_AUTH_TOKEN  = "a253f6aa57f6bf7e5ee66fc5e29393e8"
-TWILIO_FROM        = "+19402896502"
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN  = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_FROM        = os.getenv("TWILIO_FROM")
 
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 # ── Router ────────────────────────────────────────────────────────────────────
 router = APIRouter(prefix="/twilio", tags=["twilio"])
 
-# ── In-memory audio store (clip_id → MP3 bytes) ──────────────────────────────
-_audio_store: dict[str, bytes] = {}
+# Google.en-IN-Wavenet-B = male Indian English neural voice (Google WaveNet)
+TWILIO_VOICE = "Google.en-IN-Wavenet-B"
+TWILIO_LANG  = "en-IN"
 
 
-def _store_audio(audio_bytes: bytes) -> str:
-    clip_id = uuid.uuid4().hex
-    _audio_store[clip_id] = audio_bytes
-    return clip_id
+def _sanitize_for_say(text: str) -> str:
+    """Strip characters that break Twilio <Say>."""
+    if not text:
+        return "One moment please."
+    text = str(text).strip()
+    if not text:
+        return "One moment please."
+    # Remove control characters (but keep space, tab, newline)
+    text = ''.join(c if ord(c) >= 32 or c in '\t\n\r' else '' for c in text)
+    # Keep only: word chars, spaces, and basic punctuation
+    # Remove: emojis and exotic unicode that Twilio can't speak
+    text = re.sub(r'[^\w\s\-.,;:!?()\'"&/]', '', text, flags=re.UNICODE)
+    # Collapse multiple spaces
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text if text else "One moment please."
 
 
-def _build_twiml(base_url: str, clip_id: str, hang_up: bool = False) -> str:
+def _build_twiml(text: str, base_url: str, hang_up: bool = False) -> str:
     """
-    Build TwiML that plays a Sarvam TTS audio clip then either hangs up
-    or opens a <Gather> for the caller's next utterance.
+    Build TwiML that speaks `text` via <Say> with a male Indian voice,
+    then either hangs up or opens a <Gather> for the caller's next utterance.
     """
+    text = _sanitize_for_say(text)
     vr = VoiceResponse()
-    vr.play(f"{base_url}/twilio/audio/{clip_id}")
 
     if hang_up:
+        vr.say(text, voice=TWILIO_VOICE, language=TWILIO_LANG)
         vr.hangup()
     else:
         gather = Gather(
             input="speech",
             action=f"{base_url}/twilio/respond",
             method="POST",
-            language="en-IN",
+            language=TWILIO_LANG,
             speech_timeout="auto",
             timeout=8,
         )
+        gather.say(text, voice=TWILIO_VOICE, language=TWILIO_LANG)
         vr.append(gather)
         vr.redirect(f"{base_url}/twilio/respond", method="POST")
 
@@ -147,11 +165,8 @@ async def incoming_call(request: Request):
         "content": f'{{"tts_message": "{greeting}", "cart_status": "shopping", "order_data": []}}',
     })
 
-    audio_bytes = await asyncio.to_thread(m.synthesize, greeting)
-    clip_id = _store_audio(audio_bytes)
-
     base = _base_url(request)
-    twiml = _build_twiml(base, clip_id)
+    twiml = _build_twiml(greeting, base)
     return Response(content=twiml, media_type="application/xml")
 
 
@@ -182,70 +197,67 @@ async def respond_to_gather(request: Request):
     # No speech detected — re-prompt
     if not speech_text:
         msg = "Sorry, I didn't catch that. Could you please say your order again?"
-        audio_bytes = await asyncio.to_thread(m.synthesize, msg)
-        clip_id = _store_audio(audio_bytes)
-        return Response(content=_build_twiml(base, clip_id), media_type="application/xml")
+        return Response(content=_build_twiml(msg, base), media_type="application/xml")
 
-    # Run through the LLM pipeline
-    data = await asyncio.to_thread(m.process_turn, call_sid, speech_text)
+    try:
+        # Run through the LLM pipeline
+        data = await asyncio.to_thread(m.process_turn, call_sid, speech_text)
 
-    tts_msg     = data.get("tts_message", "One moment please.")
-    cart_status = data.get("cart_status", "shopping")
+        tts_msg     = data.get("tts_message") or "One moment please."
+        cart_status = data.get("cart_status", "shopping")
 
-    # Accumulate special requests across turns
-    sr = data.get("special_requests")
-    if sr:
-        m.sessions[call_sid].setdefault("special_requests", []).append(sr)
+        # Accumulate special requests across turns
+        sr = data.get("special_requests")
+        if sr:
+            m.sessions[call_sid].setdefault("special_requests", []).append(sr)
 
-    audio_bytes = await asyncio.to_thread(m.synthesize, tts_msg)
-    clip_id = _store_audio(audio_bytes)
+        hang_up = (cart_status == "closed")
+        twiml   = _build_twiml(tts_msg, base, hang_up=hang_up)
 
-    hang_up = (cart_status == "closed")
-    twiml   = _build_twiml(base, clip_id, hang_up=hang_up)
+        # Persist order when conversation is done
+        if hang_up:
+            order_data    = data.get("order_data", [])
+            total         = data.get("order_total", m.calc_total(order_data))
+            delivery_type = data.get("delivery_type")
+            special_reqs  = ", ".join(m.sessions[call_sid].get("special_requests", [])) or None
+            order_id      = m.sessions[call_sid]["order_id"]
+            phone         = m.sessions[call_sid].get("phone", "")
 
-    # Persist order when conversation is done
-    if hang_up:
-        order_data    = data.get("order_data", [])
-        total         = data.get("order_total", m.calc_total(order_data))
-        delivery_type = data.get("delivery_type")
-        special_reqs  = ", ".join(m.sessions[call_sid].get("special_requests", [])) or None
-        order_id      = m.sessions[call_sid]["order_id"]
-        phone         = m.sessions[call_sid].get("phone", "")
+            m.save_order({
+                "order_id":         order_id,
+                "customer_name":    m.sessions[call_sid].get("name"),
+                "items":            order_data,
+                "total":            total,
+                "delivery_type":    delivery_type,
+                "delivery_address": data.get("delivery_address"),
+                "special_requests": special_reqs,
+                "rating":           data.get("customer_rating"),
+                "timestamp":        datetime.now().isoformat(),
+            })
+            m.save_call_logs(call_sid, m.sessions[call_sid]["history"])
 
-        m.save_order({
-            "order_id":         order_id,
-            "customer_name":    m.sessions[call_sid].get("name"),
-            "items":            order_data,
-            "total":            total,
-            "delivery_type":    delivery_type,
-            "delivery_address": data.get("delivery_address"),
-            "special_requests": special_reqs,
-            "rating":           data.get("customer_rating"),
-            "timestamp":        datetime.now().isoformat(),
-        })
-        m.save_call_logs(call_sid, m.sessions[call_sid]["history"])
+            # Send SMS confirmation to caller
+            send_order_sms(
+                to_number=phone,
+                order_id=order_id,
+                items=order_data,
+                total=total,
+                delivery_type=delivery_type,
+                special_requests=special_reqs,
+            )
 
-        # Send SMS confirmation to caller
-        send_order_sms(
-            to_number=phone,
-            order_id=order_id,
-            items=order_data,
-            total=total,
-            delivery_type=delivery_type,
-            special_requests=special_reqs,
-        )
+        return Response(content=twiml, media_type="application/xml")
 
-    return Response(content=twiml, media_type="application/xml")
+    except Exception as e:
+        print(f"ERROR in /respond: {e}")
+        fallback = _build_twiml("Sorry, something went wrong. Please say that again.", base)
+        return Response(content=fallback, media_type="application/xml")
 
 
-# ── 3. Audio clip server ─────────────────────────────────────────────────────
-@router.get("/audio/{clip_id}")
-async def serve_audio(clip_id: str):
-    """Serves Sarvam TTS MP3 clips for Twilio <Play>."""
-    audio = _audio_store.get(clip_id)
-    if audio is None:
-        return Response(status_code=404)
-    return Response(content=audio, media_type="audio/mpeg")
+# ── 3. Status callback (optional) ───────────────────────────────────────────
+@router.get("/status")
+async def twilio_status():
+    return {"status": "ok"}
 
 
 # ── 4. Outbound call trigger ─────────────────────────────────────────────────
@@ -260,12 +272,45 @@ async def make_outbound_call(request: Request):
     body      = await request.json()
     to_number = body.get("to", "+919825526632")
     base      = _base_url(request)
-    voice_url = f"{base}/twilio/voice"
+
+    # Build inline TwiML for greeting — no tunnel needed for initial pick-up
+    greeting = (
+        "Vanakkam! This is Mysore Cafe. Arjun speaking. "
+        "How may I help you?"
+    )
+    greeting = _sanitize_for_say(greeting)
+    vr = VoiceResponse()
+    gather = Gather(
+        input="speech",
+        action=f"{base}/twilio/respond",
+        method="POST",
+        language=TWILIO_LANG,
+        speech_timeout="auto",
+        timeout=8,
+    )
+    gather.say(greeting, voice=TWILIO_VOICE, language=TWILIO_LANG)
+    vr.append(gather)
+    vr.redirect(f"{base}/twilio/respond", method="POST")
 
     call = twilio_client.calls.create(
-        url=voice_url,
+        twiml=str(vr),
         to=to_number,
         from_=TWILIO_FROM,
     )
+
+    # Pre-create session so /respond has it when Twilio calls back
+    m = _main()
+    m.sessions[call.sid] = {
+        "history":          [{
+            "role": "assistant",
+            "content": f'{{"tts_message": "{greeting}", "cart_status": "shopping", "order_data": []}}',
+        }],
+        "name":             None,
+        "fav":              None,
+        "order_id":         f"ORD-{uuid.uuid4().hex[:6].upper()}",
+        "prompt":           m.build_prompt(),
+        "special_requests": [],
+        "phone":            to_number,
+    }
 
     return {"call_sid": call.sid, "status": call.status, "to": to_number}
