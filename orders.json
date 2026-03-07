@@ -176,6 +176,84 @@
       "special_requests": null,
       "rating": 4,
       "timestamp": "2026-03-06T23:57:55.631635"
+    },
+    {
+      "order_id": "ORD-D12152",
+      "customer_name": null,
+      "items": [
+        {
+          "item_code": "B01",
+          "qty": 1,
+          "modifiers": "none",
+          "name": "Authentic Filter Coffee",
+          "price": 50
+        },
+        {
+          "item_code": "I01",
+          "qty": 1,
+          "modifiers": "none",
+          "name": "Steamed Idli (2 pieces)",
+          "price": 60
+        },
+        {
+          "item_code": "B02",
+          "qty": 1,
+          "modifiers": "none",
+          "name": "Sweet Kesari Bath",
+          "price": 60
+        }
+      ],
+      "total": 170,
+      "delivery_type": "takeout",
+      "delivery_address": null,
+      "special_requests": null,
+      "rating": "5",
+      "timestamp": "2026-03-07T00:33:58.239793"
+    },
+    {
+      "order_id": "ORD-F207A9",
+      "customer_name": null,
+      "items": [
+        {
+          "item_code": "D03",
+          "qty": 1,
+          "modifiers": "none",
+          "name": "Mysore Masala Dosa",
+          "price": 90
+        }
+      ],
+      "total": 90,
+      "delivery_type": "takeout",
+      "delivery_address": null,
+      "special_requests": null,
+      "rating": 4,
+      "timestamp": "2026-03-07T00:43:53.918212"
+    },
+    {
+      "order_id": "ORD-BF4CE3",
+      "customer_name": null,
+      "items": [
+        {
+          "item_code": "I01",
+          "qty": 1,
+          "modifiers": "none",
+          "name": "Steamed Idli (2 pieces)",
+          "price": 60
+        },
+        {
+          "item_code": "B01",
+          "qty": 1,
+          "modifiers": "none",
+          "name": "Authentic Filter Coffee",
+          "price": 50
+        }
+      ],
+      "total": 110,
+      "delivery_type": "takeout",
+      "delivery_address": null,
+      "special_requests": null,
+      "rating": 5,
+      "timestamp": "2026-03-07T11:39:00.069047"
     }
   ]
 }

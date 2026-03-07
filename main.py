@@ -271,8 +271,8 @@ def synthesize(text):
     payload = {
         "text": text,
         "target_language_code": "en-IN",
-        "speaker": "aditya",
-        "model": "bulbul:v2",
+        "speaker": "shubh",
+        "model": "bulbul:v3",
         "pace": 1.0,
         "speech_sample_rate": 22050,
         "output_audio_codec": "mp3",

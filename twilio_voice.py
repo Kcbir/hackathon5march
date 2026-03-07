@@ -14,7 +14,7 @@ import asyncio
 from datetime import datetime
 
 from fastapi import APIRouter, Request, Response
-from twilio.twiml.voice_response import VoiceResponse, Gather, Say
+from twilio.twiml.voice_response import VoiceResponse, Gather
 from twilio.rest import Client
 
 
@@ -33,30 +33,37 @@ twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 # ── Router ────────────────────────────────────────────────────────────────────
 router = APIRouter(prefix="/twilio", tags=["twilio"])
 
+# ── In-memory audio store (clip_id → MP3 bytes) ──────────────────────────────
+_audio_store: dict[str, bytes] = {}
 
-def _build_twiml(text: str, action_url: str, hang_up: bool = False) -> str:
+
+def _store_audio(audio_bytes: bytes) -> str:
+    clip_id = uuid.uuid4().hex
+    _audio_store[clip_id] = audio_bytes
+    return clip_id
+
+
+def _build_twiml(base_url: str, clip_id: str, hang_up: bool = False) -> str:
     """
-    Build TwiML that speaks `text` via <Say> then either hangs up or opens
-    a <Gather> waiting for the caller's next utterance.
+    Build TwiML that plays a Sarvam TTS audio clip then either hangs up
+    or opens a <Gather> for the caller's next utterance.
     """
     vr = VoiceResponse()
+    vr.play(f"{base_url}/twilio/audio/{clip_id}")
 
     if hang_up:
-        vr.say(text, voice="Polly.Aditi", language="en-IN")
         vr.hangup()
     else:
         gather = Gather(
             input="speech",
-            action=action_url,
+            action=f"{base_url}/twilio/respond",
             method="POST",
             language="en-IN",
             speech_timeout="auto",
             timeout=8,
         )
-        gather.say(text, voice="Polly.Aditi", language="en-IN")
         vr.append(gather)
-        # If caller says nothing within timeout, re-prompt
-        vr.redirect(action_url, method="POST")
+        vr.redirect(f"{base_url}/twilio/respond", method="POST")
 
     return str(vr)
 
@@ -67,6 +74,44 @@ def _base_url(request: Request) -> str:
     if env:
         return env
     return str(request.base_url).rstrip("/")
+
+
+def send_order_sms(to_number: str, order_id: str, items: list, total: int,
+                   delivery_type: str = None, special_requests: str = None):
+    """Send an SMS order confirmation to the customer."""
+    if not to_number:
+        return
+
+    lines = [f"Mysore Cafe - Order Confirmed! ✅",
+             f"Order ID: {order_id}", ""]
+
+    for item in items:
+        name  = item.get("name", item.get("item_code", "?"))
+        qty   = item.get("qty", 1)
+        price = item.get("price", 0)
+        lines.append(f"{qty}x {name} - Rs.{price * qty}")
+
+    lines.append("")
+    lines.append(f"Total: Rs.{total}")
+
+    if delivery_type:
+        lines.append(f"Type: {delivery_type.capitalize()}")
+    if special_requests:
+        lines.append(f"Note: {special_requests}")
+
+    lines.append("Ready in ~16 min. Thank you! 🙏")
+
+    body = "\n".join(lines)
+
+    try:
+        msg = twilio_client.messages.create(
+            from_=TWILIO_FROM,
+            body=body,
+            to=to_number,
+        )
+        print(f"SMS sent to {to_number} | SID: {msg.sid}")
+    except Exception as e:
+        print(f"SMS failed: {e}")
 
 
 # ── 1. Incoming call ──────────────────────────────────────────────────────────
@@ -80,6 +125,8 @@ async def incoming_call(request: Request):
     call_sid = form.get("CallSid") or uuid.uuid4().hex[:8]
 
     m = _main()
+    # For outbound calls To = customer; for inbound From = customer
+    caller_number = form.get("To") or form.get("From") or ""
     # Create a new ordering session keyed by CallSid
     m.sessions[call_sid] = {
         "history":          [],
@@ -88,19 +135,23 @@ async def incoming_call(request: Request):
         "order_id":         f"ORD-{uuid.uuid4().hex[:6].upper()}",
         "prompt":           m.build_prompt(),
         "special_requests": [],
+        "phone":            caller_number,
     }
 
     greeting = (
         "Vanakkam! This is Mysore Cafe. Arjun speaking. "
-        "What can I get for you today?"
+        "How may I help you?"
     )
     m.sessions[call_sid]["history"].append({
         "role":    "assistant",
         "content": f'{{"tts_message": "{greeting}", "cart_status": "shopping", "order_data": []}}',
     })
 
+    audio_bytes = await asyncio.to_thread(m.synthesize, greeting)
+    clip_id = _store_audio(audio_bytes)
+
     base = _base_url(request)
-    twiml = _build_twiml(greeting, f"{base}/twilio/respond")
+    twiml = _build_twiml(base, clip_id)
     return Response(content=twiml, media_type="application/xml")
 
 
@@ -131,8 +182,9 @@ async def respond_to_gather(request: Request):
     # No speech detected — re-prompt
     if not speech_text:
         msg = "Sorry, I didn't catch that. Could you please say your order again?"
-        twiml = _build_twiml(msg, f"{base}/twilio/respond")
-        return Response(content=twiml, media_type="application/xml")
+        audio_bytes = await asyncio.to_thread(m.synthesize, msg)
+        clip_id = _store_audio(audio_bytes)
+        return Response(content=_build_twiml(base, clip_id), media_type="application/xml")
 
     # Run through the LLM pipeline
     data = await asyncio.to_thread(m.process_turn, call_sid, speech_text)
@@ -145,29 +197,58 @@ async def respond_to_gather(request: Request):
     if sr:
         m.sessions[call_sid].setdefault("special_requests", []).append(sr)
 
+    audio_bytes = await asyncio.to_thread(m.synthesize, tts_msg)
+    clip_id = _store_audio(audio_bytes)
+
     hang_up = (cart_status == "closed")
-    twiml   = _build_twiml(tts_msg, f"{base}/twilio/respond", hang_up=hang_up)
+    twiml   = _build_twiml(base, clip_id, hang_up=hang_up)
 
     # Persist order when conversation is done
     if hang_up:
-        order_data = data.get("order_data", [])
+        order_data    = data.get("order_data", [])
+        total         = data.get("order_total", m.calc_total(order_data))
+        delivery_type = data.get("delivery_type")
+        special_reqs  = ", ".join(m.sessions[call_sid].get("special_requests", [])) or None
+        order_id      = m.sessions[call_sid]["order_id"]
+        phone         = m.sessions[call_sid].get("phone", "")
+
         m.save_order({
-            "order_id":         m.sessions[call_sid]["order_id"],
+            "order_id":         order_id,
             "customer_name":    m.sessions[call_sid].get("name"),
             "items":            order_data,
-            "total":            data.get("order_total", m.calc_total(order_data)),
-            "delivery_type":    data.get("delivery_type"),
+            "total":            total,
+            "delivery_type":    delivery_type,
             "delivery_address": data.get("delivery_address"),
-            "special_requests": ", ".join(m.sessions[call_sid].get("special_requests", [])) or None,
+            "special_requests": special_reqs,
             "rating":           data.get("customer_rating"),
             "timestamp":        datetime.now().isoformat(),
         })
         m.save_call_logs(call_sid, m.sessions[call_sid]["history"])
 
+        # Send SMS confirmation to caller
+        send_order_sms(
+            to_number=phone,
+            order_id=order_id,
+            items=order_data,
+            total=total,
+            delivery_type=delivery_type,
+            special_requests=special_reqs,
+        )
+
     return Response(content=twiml, media_type="application/xml")
 
 
-# ── 3. Outbound call trigger ─────────────────────────────────────────────────
+# ── 3. Audio clip server ─────────────────────────────────────────────────────
+@router.get("/audio/{clip_id}")
+async def serve_audio(clip_id: str):
+    """Serves Sarvam TTS MP3 clips for Twilio <Play>."""
+    audio = _audio_store.get(clip_id)
+    if audio is None:
+        return Response(status_code=404)
+    return Response(content=audio, media_type="audio/mpeg")
+
+
+# ── 4. Outbound call trigger ─────────────────────────────────────────────────
 @router.post("/call")
 async def make_outbound_call(request: Request):
     """
