@@ -1,6 +1,6 @@
-# Mysore  Cafe — AI Voice Ordering Copilot
+# Voice Ordering Copilot
 
-An AI-powered voice ordering system for restaurants. Customers call in, speak their order in **English, Hindi, or Hinglish**, and the AI waiter (Arjun) handles everything — from taking the order, pitching relevant offers, asking delivery/takeout, collecting a rating, and generating a kitchen-ready order ticket (KOT).
+An AI-powered voice ordering system for restaurants. Customers call in, speak their order in any language, and the voice handles everything — from taking the order, pitching relevant offers, asking delivery/takeout, collecting a rating, and generating a kitchen-ready order ticket (KOT).
 
 Built for a hackathon in under 24 hours.
 
